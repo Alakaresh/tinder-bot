@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
+import { spawn } from "node:child_process";
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -109,6 +110,7 @@ app.get("/", (req, res) => {
 <html lang="fr"><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Bot UI</title>
+<script src="https://cdn.jsdelivr.net/npm/@novnc/novnc@1.5.0/lib/rfb.js"></script>
 <style>
 body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:0;background:#0b0b0f;color:#eee}
 header{padding:12px 16px;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}
@@ -118,7 +120,7 @@ label{display:block;color:#bbb;font-size:12px;margin:10px 0 6px}
 input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #2a2a3a;background:#0f0f16;color:#fff}
 button{margin-top:12px;width:100%;padding:10px;border-radius:10px;border:1px solid #2a2a3a;background:#1b1b2a;color:#fff;cursor:pointer}
 button:hover{filter:brightness(1.1)}
-pre{white-space:pre-wrap;background:#0f0f16;border:1px solid #222;border-radius:14px;padding:12px;min-height:420px;overflow:auto}
+#vnc-canvas{background:#0f0f16;border:1px solid #222;border-radius:14px;min-height:420px;overflow:hidden}
 .row{display:flex;gap:10px}.row>div{flex:1}
 a{color:#9ad}
 </style></head>
@@ -152,13 +154,16 @@ a{color:#9ad}
     <option value="false">false (debug)</option>
   </select>
 
-  <button id="run">Lancer</button>
+  <div class="row">
+    <button id="load-vnc" style="flex:1">Charger</button>
+    <button id="run" style="flex:1">Lancer</button>
+  </div>
 
   <div id="job" style="margin-top:10px;color:#bbb;font-size:13px"></div>
   <div id="links" style="margin-top:8px;color:#bbb;font-size:13px"></div>
 </div>
 
-<div><pre id="log">Logs…</pre></div>
+<div id="vnc-canvas"></div>
 </main>
 
 <script>
@@ -184,8 +189,10 @@ document.getElementById('run').onclick = async ()=>{
 async function poll(){
   if(!currentJobId) return;
   const j=await api('/api/jobs/'+currentJobId);
-  if(!j.ok){ document.getElementById('log').textContent=JSON.stringify(j,null,2); return; }
-  document.getElementById('log').textContent=(j.job.logs||[]).join('\\n');
+  if(!j.ok){
+    document.getElementById('vnc-canvas').textContent = JSON.stringify(j,null,2);
+    return;
+  }
   if(j.job.status==='done'){
     const shots=(j.job.result?.screenshots||[]);
     const links=shots.map(s=>'<a href="/runs/'+currentJobId+'/'+s+'" target="_blank">'+s+'</a>').join(' • ');
@@ -198,8 +205,55 @@ async function poll(){
   }
   setTimeout(poll, 600);
 }
+document.getElementById('load-vnc').onclick = async () => {
+  const url = document.getElementById('url').value.trim();
+  if (!url) return;
+  const vncCanvas = document.getElementById('vnc-canvas');
+  vncCanvas.innerHTML = '';
+  const r = await api('/api/vnc', { method: 'POST', body: JSON.stringify({ url }) });
+  if (!r.ok) {
+    vncCanvas.textContent = JSON.stringify(r, null, 2);
+    return;
+  }
+  const rfb = new RFB(vncCanvas, r.vncUrl);
+  rfb.scaleViewport = true;
+  rfb.resizeSession = true;
+};
 </script>
 </body></html>`);
+});
+
+app.post("/api/vnc", async (req, res) => {
+  const { url } = req.body || {};
+  if (!url || typeof url !== "string" || !/^https?:\/\//i.test(url)) {
+    return res.json({ ok: false, error: "URL invalide" });
+  }
+
+  const प्रदर्शन = Math.floor(Math.random() * 100) + 100;
+  const vncPort = 5900 + प्रदर्शन;
+
+  const xvfb = spawn("Xvfb", [`:${प्रदर्शन}`, "-screen", "0", "1280x720x24"], { stdio: "pipe" });
+  xvfb.stdout.on('data', (data) => console.log(`Xvfb stdout: ${data}`));
+  xvfb.stderr.on('data', (data) => console.error(`Xvfb stderr: ${data}`));
+  xvfb.on("close", () => console.log(`Xvfb on display ${ प्रदर्शन} closed.`));
+
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  const x11vnc = spawn("x11vnc", ["-display", `:${प्रदर्शन}`, "-rfbport", `${vncPort}`, "-forever", "-shared"], { stdio: "pipe" });
+  x11vnc.stdout.on('data', (data) => console.log(`x11vnc stdout: ${data}`));
+  x11vnc.stderr.on('data', (data) => console.error(`x11vnc stderr: ${data}`));
+  x11vnc.on("close", () => console.log(`x11vnc on port ${vncPort} closed.`));
+
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  try {
+    const browser = await chromium.launch({ headless: false, args: ['--no-sandbox'], env: { ...process.env, DISPLAY: `:${ प्रदर्शन}` } });
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    res.json({ ok: true, vncUrl: `ws://127.0.0.1:${vncPort}` });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
 });
 
 app.post("/api/run", async (req, res) => {
