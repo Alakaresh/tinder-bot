@@ -3,3 +3,7 @@ debug.png
 playwright-report/
 *.log
 .env
+
+# local runs + backups
+runs/
+package.json.bak

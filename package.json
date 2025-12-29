@@ -4,10 +4,12 @@
   "type": "module",
   "private": true,
   "dependencies": {
+    "express": "^4.19.2",
     "playwright": "^1.49.0"
   },
   "scripts": {
-    "start": "node agent.js",
+    "start": "node ui-server.js",
+    "run": "node agent.js",
     "install:browsers": "playwright install chromium",
     "install:deps": "playwright install-deps"
   }
