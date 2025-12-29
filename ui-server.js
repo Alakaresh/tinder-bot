@@ -112,15 +112,19 @@ app.get("/", (req, res) => {
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Bot UI</title>
 <style>
-body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:0;background:#0b0b0f;color:#eee}
+html,body{height:100%}
+body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:0;background:#0b0b0f;color:#eee;display:flex;flex-direction:column}
 header{padding:12px 16px;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}
-main{display:grid;grid-template-columns:380px 1fr;gap:12px;padding:12px}
-.card{background:#111118;border:1px solid #222;border-radius:14px;padding:12px}
+main{flex:1;display:grid;grid-template-columns:380px 1fr;gap:12px;padding:12px;min-height:0}
+.card{background:#111118;border:1px solid #222;border-radius:14px;padding:12px;overflow:auto}
 label{display:block;color:#bbb;font-size:12px;margin:10px 0 6px}
 input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #2a2a3a;background:#0f0f16;color:#fff}
 button{margin-top:12px;width:100%;padding:10px;border-radius:10px;border:1px solid #2a2a3a;background:#1b1b2a;color:#fff;cursor:pointer}
 button:hover{filter:brightness(1.1)}
-#vnc-canvas{background:#0f0f16;border:1px solid #222;border-radius:14px;min-height:420px;overflow:hidden}
+#vnc-canvas{position:relative;background:#0f0f16;border:1px solid #222;border-radius:14px;min-height:420px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#vnc-canvas canvas{width:100%;height:100%}
+#vnc-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(15,15,22,0.72);color:#d7d7e4;font-weight:600;letter-spacing:0.3px;opacity:0;transition:opacity .2s ease;pointer-events:none}
+#vnc-canvas.loading #vnc-status{opacity:1}
 .row{display:flex;gap:10px}.row>div{flex:1}
 a{color:#9ad}
 </style></head>
@@ -163,7 +167,7 @@ a{color:#9ad}
   <div id="links" style="margin-top:8px;color:#bbb;font-size:13px"></div>
 </div>
 
-<div id="vnc-canvas"></div>
+<div id="vnc-canvas"><div id="vnc-status">Chargement…</div></div>
 </main>
 
 <script type="module">
@@ -209,7 +213,10 @@ a{color:#9ad}
 
   document.getElementById('load-vnc').onclick = async () => {
     const vncCanvas = document.getElementById('vnc-canvas');
-    vncCanvas.innerHTML = '';
+    const vncStatus = document.getElementById('vnc-status');
+    vncCanvas.classList.add('loading');
+    vncStatus.textContent = 'Connexion VNC en cours…';
+    Array.from(vncCanvas.querySelectorAll('canvas')).forEach((node) => node.remove());
 
     const r = await api('/api/vnc', {
       method: 'POST',
@@ -217,13 +224,21 @@ a{color:#9ad}
     });
 
     if (!r.ok) {
-      vncCanvas.textContent = JSON.stringify(r, null, 2);
+      vncStatus.textContent = r.error || 'Erreur de chargement';
+      vncCanvas.classList.remove('loading');
       return;
     }
 
     const rfb = new RFB(vncCanvas, r.vncUrl);
     rfb.scaleViewport = true;
     rfb.resizeSession = true;
+    rfb.addEventListener('connect', () => {
+      vncCanvas.classList.remove('loading');
+    });
+    rfb.addEventListener('disconnect', () => {
+      vncStatus.textContent = 'Déconnecté';
+      vncCanvas.classList.add('loading');
+    });
 
     console.log("VNC connecté", rfb);
   };
