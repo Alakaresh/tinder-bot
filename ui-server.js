@@ -273,7 +273,12 @@ app.post("/api/vnc", async (req, res) => {
     const browser = await chromium.launch({ headless: false, args: ['--no-sandbox'], env: { ...process.env, DISPLAY: `:${ प्रदर्शन}` } });
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "domcontentloaded" });
-    res.json({ ok: true, vncUrl: `ws://127.0.0.1:${vncPort}` });
+    const host = (req.headers["x-forwarded-host"] || req.headers.host || "").split(":")[0];
+    const proto = (req.headers["x-forwarded-proto"] || "http").toLowerCase();
+    const wsProto = proto === "https" ? "wss" : "ws";
+    
+    res.json({ ok: true, vncUrl: `${wsProto}://${host}:${vncPort}` });
+
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }
