@@ -122,7 +122,7 @@ input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #2a2a3a
 button{margin-top:12px;width:100%;padding:10px;border-radius:10px;border:1px solid #2a2a3a;background:#1b1b2a;color:#fff;cursor:pointer}
 button:hover{filter:brightness(1.1)}
 #vnc-canvas{position:relative;background:#0f0f16;border:1px solid #222;border-radius:14px;min-height:420px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-#vnc-canvas canvas{width:100%;height:100%}
+#vnc-canvas canvas{max-width:100%;max-height:100%}
 #vnc-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(15,15,22,0.72);color:#d7d7e4;font-weight:600;letter-spacing:0.3px;opacity:0;transition:opacity .2s ease;pointer-events:none}
 #vnc-canvas.loading #vnc-status{opacity:1}
 .row{display:flex;gap:10px}.row>div{flex:1}
@@ -230,7 +230,7 @@ a{color:#9ad}
     }
 
     const rfb = new RFB(vncCanvas, r.vncUrl);
-    rfb.scaleViewport = true;
+    rfb.scaleViewport = false;
     rfb.resizeSession = true;
     rfb.addEventListener('connect', () => {
       vncCanvas.classList.remove('loading');
