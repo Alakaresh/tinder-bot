@@ -111,7 +111,6 @@ app.get("/", (req, res) => {
 <html lang="fr"><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Bot UI</title>
-<script src="https://cdn.jsdelivr.net/npm/novnc@1.2.0/lib/rfb.min.js"></script>
 <style>
 body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:0;background:#0b0b0f;color:#eee}
 header{padding:12px 16px;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}
@@ -167,60 +166,69 @@ a{color:#9ad}
 <div id="vnc-canvas"></div>
 </main>
 
-<script>
-let currentJobId=null;
-async function api(path, opts){
-  const r=await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts));
-  return r.json();
-}
-document.getElementById('run').onclick = async ()=>{
-  const payload={
-    url: document.getElementById('url').value.trim(),
-    mode: document.getElementById('mode').value,
-    steps: Number(document.getElementById('steps').value||30),
-    headless: document.getElementById('headless').value === 'true'
+<script type="module">
+  import RFB from "https://cdn.jsdelivr.net/npm/@novnc/novnc/core/rfb.js";
+
+  let currentJobId = null;
+
+  async function api(path, opts){
+    const r = await fetch(path, Object.assign({
+      headers:{'Content-Type':'application/json'}
+    }, opts));
+    return r.json();
+  }
+
+  document.getElementById('run').onclick = async ()=>{
+    const payload={
+      url: document.getElementById('url').value.trim(),
+      mode: document.getElementById('mode').value,
+      steps: Number(document.getElementById('steps').value||30),
+      headless: document.getElementById('headless').value === 'true'
+    };
+    const j=await api('/api/run',{method:'POST',body:JSON.stringify(payload)});
+    if(!j.ok) return;
+
+    currentJobId=j.jobId;
+    document.getElementById('job').textContent='Job: '+currentJobId;
+    poll();
   };
-  const j=await api('/api/run',{method:'POST',body:JSON.stringify(payload)});
-  if(!j.ok){ document.getElementById('log').textContent=JSON.stringify(j,null,2); return; }
-  currentJobId=j.jobId;
-  document.getElementById('job').textContent='Job: '+currentJobId;
-  document.getElementById('links').innerHTML='';
-  poll();
-};
-async function poll(){
-  if(!currentJobId) return;
-  const j=await api('/api/jobs/'+currentJobId);
-  if(!j.ok){
-    document.getElementById('vnc-canvas').textContent = JSON.stringify(j,null,2);
-    return;
+
+  async function poll(){
+    if(!currentJobId) return;
+    const j=await api('/api/jobs/'+currentJobId);
+    if(j.job?.status==='done'){
+      const shots=(j.job.result?.screenshots||[]);
+      document.getElementById('links').innerHTML =
+        'Screenshots: ' + shots.map(
+          s=>'<a href="/runs/'+currentJobId+'/'+s+'" target="_blank">'+s+'</a>'
+        ).join(' • ');
+      return;
+    }
+    setTimeout(poll, 600);
   }
-  if(j.job.status==='done'){
-    const shots=(j.job.result?.screenshots||[]);
-    const links=shots.map(s=>'<a href="/runs/'+currentJobId+'/'+s+'" target="_blank">'+s+'</a>').join(' • ');
-    document.getElementById('links').innerHTML='Screenshots: '+links;
-    return;
-  }
-  if(j.job.status==='error'){
-    document.getElementById('links').innerHTML='Erreur: '+(j.job.result?.error||'');
-    return;
-  }
-  setTimeout(poll, 600);
-}
-document.getElementById('load-vnc').onclick = async () => {
-  const url = document.getElementById('url').value.trim();
-  if (!url) return;
-  const vncCanvas = document.getElementById('vnc-canvas');
-  vncCanvas.innerHTML = '';
-  const r = await api('/api/vnc', { method: 'POST', body: JSON.stringify({ url }) });
-  if (!r.ok) {
-    vncCanvas.textContent = JSON.stringify(r, null, 2);
-    return;
-  }
-  const rfb = new RFB(vncCanvas, r.vncUrl);
-  rfb.scaleViewport = true;
-  rfb.resizeSession = true;
-};
+
+  document.getElementById('load-vnc').onclick = async () => {
+    const vncCanvas = document.getElementById('vnc-canvas');
+    vncCanvas.innerHTML = '';
+
+    const r = await api('/api/vnc', {
+      method: 'POST',
+      body: JSON.stringify({ url: document.getElementById('url').value.trim() })
+    });
+
+    if (!r.ok) {
+      vncCanvas.textContent = JSON.stringify(r, null, 2);
+      return;
+    }
+
+    const rfb = new RFB(vncCanvas, r.vncUrl);
+    rfb.scaleViewport = true;
+    rfb.resizeSession = true;
+
+    console.log("VNC connecté", rfb);
+  };
 </script>
+
 </body></html>`);
 });
 
