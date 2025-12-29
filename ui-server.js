@@ -2,6 +2,7 @@ import express from "express";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import net from "node:net";
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 
@@ -223,6 +224,20 @@ document.getElementById('load-vnc').onclick = async () => {
 </body></html>`);
 });
 
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on('error', reject);
+    server.listen(0, () => {
+      const { port } = server.address();
+      server.close(() => {
+        resolve(port);
+      });
+    });
+  });
+}
+
 app.post("/api/vnc", async (req, res) => {
   const { url } = req.body || {};
   if (!url || typeof url !== "string" || !/^https?:\/\//i.test(url)) {
@@ -230,7 +245,7 @@ app.post("/api/vnc", async (req, res) => {
   }
 
   const प्रदर्शन = Math.floor(Math.random() * 100) + 100;
-  const vncPort = 5900 + प्रदर्शन;
+  const vncPort = await getFreePort();
 
   const xvfb = spawn("Xvfb", [`:${प्रदर्शन}`, "-screen", "0", "1280x720x24"], { stdio: "pipe" });
   xvfb.stdout.on('data', (data) => console.log(`Xvfb stdout: ${data}`));
