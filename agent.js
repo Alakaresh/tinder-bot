@@ -1,11 +1,26 @@
 import { chromium } from "playwright";
 
-const URL = process.env.URL || "https://example.com";
+const SITES = {
+  example: "https://example.com",
+  tinder: "https://tinder.com",
+};
+
+const SITE_KEY = process.env.SITE || "example";
+const URL = process.env.URL || SITES[SITE_KEY];
 const HEADLESS = (process.env.HEADLESS || "true") === "true";
+
+if (!URL) {
+  const availableSites = Object.keys(SITES).join(", ");
+  throw new Error(
+    `Site inconnu "${SITE_KEY}". Sites disponibles: ${availableSites}.`,
+  );
+}
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function main() {
+  console.log(`🌐 Site sélectionné: ${SITE_KEY} (${URL})`);
+
   const browser = await chromium.launch({ headless: HEADLESS });
   const page = await browser.newPage();
 
