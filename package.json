@@ -1,0 +1,14 @@
+{
+  "name": "tinder-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "playwright": "^1.49.0"
+  },
+  "scripts": {
+    "start": "node agent.js",
+    "install:browsers": "playwright install chromium",
+    "install:deps": "playwright install-deps"
+  }
+}
