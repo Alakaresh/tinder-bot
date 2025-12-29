@@ -111,7 +111,7 @@ app.get("/", (req, res) => {
 <html lang="fr"><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Bot UI</title>
-<script src="https://cdn.jsdelivr.net/npm/@novnc/novnc@1.5.0/lib/rfb.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/novnc@1.2.0/lib/rfb.min.js"></script>
 <style>
 body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:0;background:#0b0b0f;color:#eee}
 header{padding:12px 16px;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}
