@@ -9,7 +9,6 @@
   },
   "scripts": {
     "start": "node ui-server.js",
-    "run": "node agent.js",
     "install:browsers": "playwright install chromium",
     "install:deps": "playwright install-deps"
   }
