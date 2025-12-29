@@ -38,7 +38,22 @@ a{color:#9ad}
   <label>URL</label>
   <input id="url" value="http://127.0.0.1:8088/" />
 
+  <label>Bot</label>
+  <select id="bot"></select>
+
+  <div class="row">
+    <div>
+      <label>Actions max</label>
+      <input id="bot-count" type="number" min="1" max="200" value="20" />
+    </div>
+    <div>
+      <label>Délai (ms)</label>
+      <input id="bot-delay" type="number" min="250" max="10000" value="1800" />
+    </div>
+  </div>
+
   <button id="load-vnc">Charger</button>
+  <button id="start-bot">Lancer le bot</button>
 </div>
 
 <div id="vnc-canvas"><div id="vnc-status">Chargement…</div></div>
@@ -54,6 +69,27 @@ a{color:#9ad}
     return r.json();
   }
 
+  const botSelect = document.getElementById('bot');
+  const botCount = document.getElementById('bot-count');
+  const botDelay = document.getElementById('bot-delay');
+
+  async function loadBots() {
+    const response = await api('/api/bots');
+    if (!response.ok) {
+      botSelect.innerHTML = '<option value="manual">Manuel</option>';
+      return;
+    }
+    botSelect.innerHTML = '';
+    response.bots.forEach((bot) => {
+      const option = document.createElement('option');
+      option.value = bot.id;
+      option.textContent = bot.label;
+      botSelect.appendChild(option);
+    });
+  }
+
+  await loadBots();
+
   document.getElementById('load-vnc').onclick = async () => {
     const vncCanvas = document.getElementById('vnc-canvas');
     const vncStatus = document.getElementById('vnc-status');
@@ -63,7 +99,14 @@ a{color:#9ad}
 
     const r = await api('/api/vnc', {
       method: 'POST',
-      body: JSON.stringify({ url: document.getElementById('url').value.trim() })
+      body: JSON.stringify({
+        url: document.getElementById('url').value.trim(),
+        botId: botSelect.value,
+        botConfig: {
+          maxActions: Number.parseInt(botCount.value, 10),
+          delayMs: Number.parseInt(botDelay.value, 10)
+        }
+      })
     });
 
     if (!r.ok) {
@@ -85,9 +128,89 @@ a{color:#9ad}
 
     console.log("VNC connecté", rfb);
   };
+
+  document.getElementById('start-bot').onclick = async () => {
+    const r = await api('/api/bot/start', {
+      method: 'POST',
+      body: JSON.stringify({
+        botId: botSelect.value,
+        botConfig: {
+          maxActions: Number.parseInt(botCount.value, 10),
+          delayMs: Number.parseInt(botDelay.value, 10)
+        }
+      })
+    });
+
+    if (!r.ok) {
+      alert(r.error || 'Impossible de lancer le bot');
+    }
+  };
 </script>
 
 </body></html>`);
+});
+
+const bots = [
+  {
+    id: "manual",
+    label: "Manuel (pas d'automatisation)",
+    run: null,
+  },
+  {
+    id: "tinderlike",
+    label: "Tinderlike (auto swipe)",
+    run: async (page, config) => {
+      const maxActions = Number.isFinite(config?.maxActions) ? config.maxActions : 20;
+      const delayMs = Number.isFinite(config?.delayMs) ? config.delayMs : 1800;
+      for (let i = 0; i < maxActions; i += 1) {
+        console.log(`[bot:tinderlike] action=arrow-up index=${i + 1}/${maxActions}`);
+        await page.keyboard.press("ArrowUp");
+        await page.waitForTimeout(Math.max(200, Math.round(delayMs / 3)));
+
+        console.log(`[bot:tinderlike] action=scroll-down index=${i + 1}/${maxActions}`);
+        await page.mouse.wheel(0, 900);
+        await page.waitForTimeout(Math.max(200, Math.round(delayMs / 2)));
+
+        const direction = Math.random() < 0.5 ? "ArrowLeft" : "ArrowRight";
+        console.log(`[bot:tinderlike] action=${direction} index=${i + 1}/${maxActions}`);
+        await page.keyboard.press(direction);
+        await page.waitForTimeout(delayMs);
+      }
+    },
+  },
+];
+
+let activeSession = {
+  page: null,
+  botId: "manual",
+  botConfig: {},
+};
+
+app.get("/api/bots", (req, res) => {
+  res.json({
+    ok: true,
+    bots: bots.map((bot) => ({ id: bot.id, label: bot.label })),
+  });
+});
+
+app.post("/api/bot/start", async (req, res) => {
+  const { botId = activeSession.botId, botConfig = activeSession.botConfig } = req.body || {};
+  const selectedBot = bots.find((bot) => bot.id === botId) || bots[0];
+  if (!activeSession.page) {
+    return res.json({ ok: false, error: "Aucune session active. Charge d'abord l'URL." });
+  }
+  if (!selectedBot.run) {
+    return res.json({ ok: false, error: "Ce bot ne lance aucune action." });
+  }
+
+  activeSession.botId = selectedBot.id;
+  activeSession.botConfig = botConfig || {};
+
+  selectedBot.run(activeSession.page, activeSession.botConfig).catch((error) => {
+    console.error(`[bot:${selectedBot.id}]`, error);
+  });
+
+  res.json({ ok: true });
 });
 
 function getFreePort() {
@@ -105,7 +228,7 @@ function getFreePort() {
 }
 
 app.post("/api/vnc", async (req, res) => {
-  const { url } = req.body || {};
+  const { url, botId = "manual", botConfig = {} } = req.body || {};
   if (!url || typeof url !== "string" || !/^https?:\/\//i.test(url)) {
     return res.json({ ok: false, error: "URL invalide" });
   }
@@ -131,6 +254,7 @@ app.post("/api/vnc", async (req, res) => {
     const browser = await chromium.launch({ headless: false, args: ['--no-sandbox'], env: { ...process.env, DISPLAY: `:${ प्रदर्शन}` } });
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "domcontentloaded" });
+    activeSession = { page, botId, botConfig };
     const host = (req.headers["x-forwarded-host"] || req.headers.host || "").split(":")[0];
     const proto = (req.headers["x-forwarded-proto"] || "http").toLowerCase();
     const wsProto = proto === "https" ? "wss" : "ws";
