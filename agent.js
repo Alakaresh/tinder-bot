@@ -10,7 +10,8 @@ const SITES = {
 const DEFAULT_SITE = "example";
 const SITE_KEY = process.env.SITE || DEFAULT_SITE;
 const URL = process.env.URL || SITES[SITE_KEY];
-const HEADLESS = (process.env.HEADLESS || "false") === "true";
+const HEADLESS = (process.env.HEADLESS || "true") === "true";
+const PREVIEW_ENABLED = (process.env.PREVIEW || "true") === "true";
 
 if (!URL) {
   const availableSites = Object.keys(SITES).join(", ");
@@ -46,6 +47,19 @@ async function runBotActions(page) {
   console.log("✅ screenshot: debug.png");
 }
 
+async function showPreview(selectedUrl) {
+  const browser = await chromium.launch({ headless: false });
+  const page = await browser.newPage();
+
+  page.on("console", msg => console.log("[preview]", msg.text()));
+  page.on("pageerror", err => console.log("[preview pageerror]", err));
+
+  await page.goto(selectedUrl, { waitUntil: "domcontentloaded" });
+  console.log("👀 Aperçu affiché. Aucune action n'a été exécutée.");
+
+  return browser;
+}
+
 async function main() {
   let selectedSite = SITE_KEY;
   let selectedUrl = URL;
@@ -64,6 +78,17 @@ async function main() {
 
   console.log(`🌐 Site sélectionné: ${selectedSite} (${selectedUrl})`);
 
+  let previewBrowser = null;
+  if (PREVIEW_ENABLED) {
+    previewBrowser = await showPreview(selectedUrl);
+  }
+
+  await waitForBotTrigger();
+
+  if (previewBrowser) {
+    await previewBrowser.close();
+  }
+
   const browser = await chromium.launch({ headless: HEADLESS });
   const page = await browser.newPage();
 
@@ -71,8 +96,6 @@ async function main() {
   page.on("pageerror", err => console.log("[pageerror]", err));
 
   await page.goto(selectedUrl, { waitUntil: "domcontentloaded" });
-
-  await waitForBotTrigger();
   await runBotActions(page);
 
   await browser.close();
