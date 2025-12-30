@@ -157,6 +157,17 @@ const bots = [
     run: null,
   },
   {
+    id: "inspector",
+    label: "HTML Inspector",
+    run: async (page, config) => {
+      console.log("[bot:inspector] Getting page HTML content...");
+      const content = await page.content();
+      console.log("================ HTML CONTENT ================");
+      console.log(content);
+      console.log("==============================================");
+    },
+  },
+  {
     id: "tinderlike",
     label: "Tinderlike (auto swipe)",
     run: async (page, config) => {
