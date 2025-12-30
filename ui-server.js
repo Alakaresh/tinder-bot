@@ -52,6 +52,15 @@ a{color:#9ad}
     </div>
   </div>
 
+  <label>Mots-clés positifs (ex: \`art:10, voyage:5\`)</label>
+  <input id="bot-positive-keywords" value="art:10, voyage:5, musique:5, cinéma:5, sport:3, animaux:3" />
+
+  <label>Mots-clés négatifs (ex: \`fumeur:-20, soirée:-5\`)</label>
+  <input id="bot-negative-keywords" value="fumeur:-20, cigarette:-20, 420:-20, soirée:-5" />
+
+  <label>Score minimum</label>
+  <input id="bot-min-score" type="number" min="0" max="100" value="10" />
+
   <button id="load-vnc">Charger</button>
   <button id="start-bot">Lancer le bot</button>
 </div>
@@ -104,7 +113,10 @@ a{color:#9ad}
         botId: botSelect.value,
         botConfig: {
           maxActions: Number.parseInt(botCount.value, 10),
-          delayMs: Number.parseInt(botDelay.value, 10)
+          delayMs: Number.parseInt(botDelay.value, 10),
+          positiveKeywords: document.getElementById('bot-positive-keywords').value,
+          negativeKeywords: document.getElementById('bot-negative-keywords').value,
+          minScore: Number.parseInt(document.getElementById('bot-min-score').value, 10),
         }
       })
     });
@@ -136,7 +148,10 @@ a{color:#9ad}
         botId: botSelect.value,
         botConfig: {
           maxActions: Number.parseInt(botCount.value, 10),
-          delayMs: Number.parseInt(botDelay.value, 10)
+          delayMs: Number.parseInt(botDelay.value, 10),
+          positiveKeywords: document.getElementById('bot-positive-keywords').value,
+          negativeKeywords: document.getElementById('bot-negative-keywords').value,
+          minScore: Number.parseInt(document.getElementById('bot-min-score').value, 10),
         }
       })
     });
@@ -150,6 +165,18 @@ a{color:#9ad}
 </body></html>`);
 });
 
+function parseKeywords(keywordsStr) {
+  const keywords = new Map();
+  for (const part of keywordsStr.split(',')) {
+    const [keyword, weightStr] = part.trim().split(':');
+    const weight = Number.parseInt(weightStr, 10);
+    if (keyword && !Number.isNaN(weight)) {
+      keywords.set(keyword.toLowerCase(), weight);
+    }
+  }
+  return keywords;
+}
+
 const bots = [
   {
     id: "manual",
@@ -157,33 +184,35 @@ const bots = [
     run: null,
   },
   {
-    id: "inspector",
-    label: "HTML Inspector",
-    run: async (page, config) => {
-      console.log("[bot:inspector] Getting page HTML content...");
-      const content = await page.content();
-      console.log("================ HTML CONTENT ================");
-      console.log(content);
-      console.log("==============================================");
-    },
-  },
-  {
     id: "tinderlike",
     label: "Tinderlike (auto swipe)",
     run: async (page, config) => {
       const maxActions = Number.isFinite(config?.maxActions) ? config.maxActions : 20;
       const delayMs = Number.isFinite(config?.delayMs) ? config.delayMs : 1800;
+      const positiveKeywords = parseKeywords(config?.positiveKeywords || '');
+      const negativeKeywords = parseKeywords(config?.negativeKeywords || '');
+      const minScore = Number.isFinite(config?.minScore) ? config.minScore : 10;
+
       for (let i = 0; i < maxActions; i += 1) {
-        console.log(`[bot:tinderlike] action=arrow-up index=${i + 1}/${maxActions}`);
-        await page.keyboard.press("ArrowUp");
         await page.waitForTimeout(Math.max(200, Math.round(delayMs / 3)));
 
-        console.log(`[bot:tinderlike] action=scroll-down index=${i + 1}/${maxActions}`);
-        await page.mouse.wheel(0, 900);
-        await page.waitForTimeout(Math.max(200, Math.round(delayMs / 2)));
+        const cardText = await page.locator('.cardScroll').textContent();
+        let score = 0;
 
-        const direction = Math.random() < 0.5 ? "ArrowLeft" : "ArrowRight";
-        console.log(`[bot:tinderlike] action=${direction} index=${i + 1}/${maxActions}`);
+        for (const [keyword, weight] of positiveKeywords.entries()) {
+          if (cardText.toLowerCase().includes(keyword)) {
+            score += weight;
+          }
+        }
+
+        for (const [keyword, weight] of negativeKeywords.entries()) {
+          if (cardText.toLowerCase().includes(keyword)) {
+            score += weight;
+          }
+        }
+
+        const direction = score >= minScore ? "ArrowRight" : "ArrowLeft";
+        console.log(\`[bot:tinderlike] score=\${score}, minScore=\${minScore}, action=\${direction} index=\${i + 1}/\${maxActions}\`);
         await page.keyboard.press(direction);
         await page.waitForTimeout(delayMs);
       }
@@ -218,7 +247,7 @@ app.post("/api/bot/start", async (req, res) => {
   activeSession.botConfig = botConfig || {};
 
   selectedBot.run(activeSession.page, activeSession.botConfig).catch((error) => {
-    console.error(`[bot:${selectedBot.id}]`, error);
+    console.error(\`[bot:\${selectedBot.id}]\`, error);
   });
 
   res.json({ ok: true });
@@ -247,22 +276,22 @@ app.post("/api/vnc", async (req, res) => {
   const प्रदर्शन = Math.floor(Math.random() * 100) + 100;
   const vncPort = await getFreePort();
 
-  const xvfb = spawn("Xvfb", [`:${प्रदर्शन}`, "-screen", "0", "1280x720x24"], { stdio: "pipe" });
-  xvfb.stdout.on('data', (data) => console.log(`Xvfb stdout: ${data}`));
-  xvfb.stderr.on('data', (data) => console.error(`Xvfb stderr: ${data}`));
-  xvfb.on("close", () => console.log(`Xvfb on display ${ प्रदर्शन} closed.`));
+  const xvfb = spawn("Xvfb", [\`:\${ प्रदर्शन}\`, "-screen", "0", "1280x720x24"], { stdio: "pipe" });
+  xvfb.stdout.on('data', (data) => console.log(\`Xvfb stdout: \${data}\`));
+  xvfb.stderr.on('data', (data) => console.error(\`Xvfb stderr: \${data}\`));
+  xvfb.on("close", () => console.log(\`Xvfb on display \${ प्रदर्शन} closed.\`));
 
   await new Promise(resolve => setTimeout(resolve, 1000));
 
-  const x11vnc = spawn("x11vnc", ["-display", `:${प्रदर्शन}`, "-rfbport", `${vncPort}`, "-forever", "-shared"], { stdio: "pipe" });
-  x11vnc.stdout.on('data', (data) => console.log(`x11vnc stdout: ${data}`));
-  x11vnc.stderr.on('data', (data) => console.error(`x11vnc stderr: ${data}`));
-  x11vnc.on("close", () => console.log(`x11vnc on port ${vncPort} closed.`));
+  const x11vnc = spawn("x11vnc", ["-display", \`:\${ प्रदर्शन}\`, "-rfbport", \`\${vncPort}\`, "-forever", "-shared"], { stdio: "pipe" });
+  x11vnc.stdout.on('data', (data) => console.log(\`x11vnc stdout: \${data}\`));
+  x11vnc.stderr.on('data', (data) => console.error(\`x11vnc stderr: \${data}\`));
+  x11vnc.on("close", () => console.log(\`x11vnc on port \${vncPort} closed.\`));
 
   await new Promise(resolve => setTimeout(resolve, 1000));
 
   try {
-    const browser = await chromium.launch({ headless: false, args: ['--no-sandbox'], env: { ...process.env, DISPLAY: `:${ प्रदर्शन}` } });
+    const browser = await chromium.launch({ headless: false, args: ['--no-sandbox'], env: { ...process.env, DISPLAY: \`:\${ प्रदर्शन}\` } });
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "domcontentloaded" });
     activeSession = { page, botId, botConfig };
@@ -270,7 +299,7 @@ app.post("/api/vnc", async (req, res) => {
     const proto = (req.headers["x-forwarded-proto"] || "http").toLowerCase();
     const wsProto = proto === "https" ? "wss" : "ws";
     
-    res.json({ ok: true, vncUrl: `${wsProto}://${host}:${vncPort}` });
+    res.json({ ok: true, vncUrl: \`\${wsProto}://\${host}:\${vncPort}\` });
 
   } catch (e) {
     res.json({ ok: false, error: e.message });
@@ -278,5 +307,5 @@ app.post("/api/vnc", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Bot UI: http://0.0.0.0:${PORT}`);
+  console.log(\`Bot UI: http://0.0.0.0:\${PORT}\`);
 });
